@@ -1,132 +1,110 @@
-import {redirectIfNotLoggedIn} from "../auth.js";
 import {getCategories} from "../services/metadataService.js";
 import {getMovies, createMovie, deleteMovie, getShowingsForMovie} from "../services/moviesService.js";
+import {renderTable} from "../components/Table.js";
 
-redirectIfNotLoggedIn()
+async function render(container, params) {
+    container.innerHTML = `
+        <a href="#/admin/dashboard">← Back to Dashboard</a>
+        <h2>Add New Movie</h2>
+        <form id="movieForm">
+            <label for="title">Title:</label>
+            <input type="text" id="title" required>
+            <label for="ageLimit">Age limit:</label>
+            <input type="number" id="ageLimit" min="0" step="1" required>
+            <label for="duration">Duration:</label>
+            <input type="number" id="duration" min="0" step="1" required>
+            <label>Categories:</label>
+            <div id="categoriesContainer"></div>
+            <label for="description">Description:</label>
+            <textarea id="description" rows="4" required></textarea>
+            <button type="submit">Save Movie</button>
+        </form>
+        <div id="message"></div>
+        <h2>Current movies:</h2>
+        <div id="moviesTableContainer"></div>
+    `;
 
-document.addEventListener("DOMContentLoaded", async () => {
+    document.getElementById("movieForm").addEventListener("submit", (e) => handleSubmit(e, container));
     await loadCategories();
-    await loadMovies();
-    document.getElementById("movieForm").addEventListener("submit", handleSubmit);
-});
+    await loadMovies(container);
+}
 
 async function loadCategories() {
     const categories = await getCategories();
     const container = document.getElementById("categoriesContainer");
-
     categories.forEach(category => {
         const label = document.createElement("label");
         label.style.display = "block";
-
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.value = category;
-
         label.appendChild(checkbox);
         label.append(" " + category);
-
         container.appendChild(label);
     });
 }
 
-async function handleSubmit(event){
+async function handleSubmit(event, container) {
     event.preventDefault();
-
-    const title = document.getElementById("title").value;
-    const ageLimit = parseInt(document.getElementById("ageLimit").value, 10);
-    const duration = parseInt(document.getElementById("duration").value, 10);
-    const categories = Array.from(
-        document.querySelectorAll("#categoriesContainer input:checked")
-    ).map(cb => cb.value);
-    const description = document.getElementById("description").value;
+    const movieData = {
+        title: document.getElementById("title").value,
+        ageLimit: parseInt(document.getElementById("ageLimit").value, 10),
+        duration: parseInt(document.getElementById("duration").value, 10),
+        categories: Array.from(document.querySelectorAll("#categoriesContainer input:checked")).map(cb => cb.value),
+        description: document.getElementById("description").value
+    };
 
     try {
-        await createMovie({title,ageLimit,duration,categories,description});
-        const message = document.getElementById("message");
-        message.textContent = "Movie created!";
-        message.style.color = "green";
-        await loadMovies();
+        await createMovie(movieData);
+        document.getElementById("message").textContent = "Movie created!";
+        await loadMovies(container);
     } catch (err) {
-        const message = document.getElementById("message");
-        message.textContent = "Error: " + err.message;
-        message.style.color = "red";
+        document.getElementById("message").textContent = "Error: " + err.message;
     }
 }
 
-async function loadMovies() {
+async function loadMovies(container) {
     const movies = await getMovies();
-    const container = document.getElementById("moviesTableContainer");
-    container.innerHTML = ""; // clear previous
+    const tableContainer = document.getElementById("moviesTableContainer");
+    tableContainer.innerHTML = "";
 
     if (movies.length === 0) {
-        container.textContent = "No movies found.";
+        tableContainer.textContent = "No movies found.";
         return;
     }
 
-    const table = document.createElement("table");
-
-    const thead = document.createElement("thead");
-    const headerRow = thead.insertRow();
-
-    ["Title", "Age Limit", "Duration", "Categories", "Description", "Action"].forEach(h => {
-        const th = document.createElement("th");
-        th.textContent = h;
-        headerRow.appendChild(th);
-    });
-
-    table.appendChild(thead);
-
-    const tbody = document.createElement("tbody");
-
-    movies.forEach(movie => {
-        const row = tbody.insertRow();
-
-        row.insertCell().textContent = movie.title;
-        row.insertCell().textContent = movie.ageLimit;
-        row.insertCell().textContent = movie.duration + " min";
-        row.insertCell().textContent = movie.categories.join(", ");
-        row.insertCell().textContent = movie.description;
-
-        const actionCell = document.createElement("td");
-        row.appendChild(actionCell);
-
+    const headers = ["Title", "Age Limit", "Duration", "Categories", "Action"];
+    const rows = movies.map(movie => {
+        const actions = document.createElement("div");
+        
         const editLink = document.createElement("a");
         editLink.textContent = "Edit";
-        editLink.href = `edit-movie.html?id=${movie.movieId}`;
-        actionCell.appendChild(editLink);
+        editLink.href = `#/admin/edit-movie?id=${movie.movieId}`;
+        actions.appendChild(editLink);
 
         const deleteLink = document.createElement("a");
         deleteLink.textContent = "Delete";
         deleteLink.href = "#";
         deleteLink.style.marginLeft = "12px";
-        deleteLink.addEventListener("click", (e) => {
+        deleteLink.addEventListener("click", async (e) => {
             e.preventDefault();
-            handleDelete(movie.movieId);
+            if (confirm("Delete movie?")) {
+                await deleteMovie(movie.movieId);
+                await loadMovies(container);
+            }
         });
-        actionCell.appendChild(deleteLink);
+        actions.appendChild(deleteLink);
+
+        return [
+            movie.title,
+            movie.ageLimit,
+            movie.duration + " min",
+            movie.categories.join(", "),
+            actions
+        ];
     });
 
-    table.appendChild(tbody);
-    container.appendChild(table);
+    tableContainer.appendChild(renderTable(headers, rows));
 }
 
-async function handleDelete(movieId) {
-    const showings = await getShowingsForMovie(movieId);
-    if (showings.length > 0) {
-        alert("Can't delete movie, because it is included in an existing showing");
-        return;
-    }
-
-    const confirmed = confirm("Are you sure you want to delete this movie?");
-
-    if (!confirmed) {
-        return; // user cancelled
-    }
-
-    try {
-        await deleteMovie(movieId);
-        window.location.href = "movies.html";
-    } catch (err) {
-        document.getElementById("message").textContent = "Error: " + err.message;
-    }
-}
+export default { render };

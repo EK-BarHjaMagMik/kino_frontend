@@ -1,73 +1,92 @@
-import {getTheatres, createTheatre,deleteTheatre } from "../services/theatresService.js";
-import {redirectIfNotLoggedIn} from "../auth.js";
+import {getTheatres, createTheatre, deleteTheatre} from "../services/theatresService.js";
+import {renderTable} from "../components/Table.js";
 
-redirectIfNotLoggedIn();
+async function render(container, params) {
+    container.innerHTML = `
+        <a href="#/admin/dashboard">← Back to Dashboard</a>
+        <h2>Create a new Theatre</h2>
+        <form id="theatreForm">
+            <label for="theatreNumber">Theatre Number:</label>
+            <input type="number" id="theatreNumber" min="1" required>
+            <label for="numberOfRows">Number of Rows:</label>
+            <input type="number" id="numberOfRows" min="1" required>
+            <label for="seatsPerRow">Seats per Rows:</label>
+            <input type="number" id="seatsPerRow" min="1" required>
+            <button type="submit">Create theatre</button>
+        </form>
+        <div id="message"></div>
+        <h2>Theatres</h2>
+        <div id="theatresTableContainer"></div>
+    `;
 
-document.addEventListener("DOMContentLoaded", async () => {
-    await loadTheatres();
-    document.getElementById("theatreForm").addEventListener("submit", handleSubmit);
-});
+    document.getElementById("theatreForm").addEventListener("submit", (e) => handleSubmit(e, container));
+    await loadTheatres(container);
+}
 
-
-async function loadTheatres() {
+async function loadTheatres(container) {
     const theatres = await getTheatres();
-    const container = document.getElementById("theatresContainer");
-    container.innerHTML = "";
-    theatres.forEach(theatre => {
-        const theatreDiv = document.createElement("div");
-        theatreDiv.classList.add("theatre");
-        theatreDiv.innerHTML = `
-            <h3>Theatre ${theatre.theatreNumber}</h3>
-            <p>Number of rows: ${theatre.numberOfRows}</p>
-            <p>Seats per row: ${theatre.seatsPerRow}</p>
-        `;
+    const tableContainer = document.getElementById("theatresTableContainer");
+    tableContainer.innerHTML = "";
+    
+    if (theatres.length === 0) {
+        tableContainer.textContent = "No theatres found.";
+        return;
+    }
+
+    const headers = ["Theatre #", "Rows", "Seats/Row", "Action"];
+    const rows = theatres.map(theatre => {
+        const actions = document.createElement("div");
+        
         const editButton = document.createElement("button");
         editButton.textContent = "Edit";
-        editButton.addEventListener("click", () => window.location.href = `edit-theatre.html?id=${theatre.theatreId}`);
-        theatreDiv.appendChild(editButton);
-        theatreDiv.appendChild(document.createElement("br"));
-
+        editButton.addEventListener("click", () => window.location.hash = `#/admin/edit-theatre?id=${theatre.theatreId}`);
+        
         const deleteButton = document.createElement("button");
         deleteButton.textContent = "Delete";
-        deleteButton.addEventListener("click", () => handleDelete(theatre.theatreId));
-        theatreDiv.appendChild(deleteButton);
-        container.appendChild(theatreDiv);
+        deleteButton.style.marginLeft = "8px";
+        deleteButton.addEventListener("click", () => handleDelete(theatre.theatreId, container));
+        
+        actions.appendChild(editButton);
+        actions.appendChild(deleteButton);
+        
+        return [
+            theatre.theatreNumber,
+            theatre.numberOfRows,
+            theatre.seatsPerRow,
+            actions
+        ];
     });
+
+    tableContainer.appendChild(renderTable(headers, rows));
 }
 
-async function handleSubmit(event) {
+async function handleSubmit(event, container) {
     event.preventDefault();
-
-    const theatreNumber = document.getElementById("theatreNumber").value;
-    const numberOfRows = document.getElementById("numberOfRows").value;
-    const seatsPerRow = document.getElementById("seatsPerRow").value;
+    const theatreData = {
+        theatreNumber: document.getElementById("theatreNumber").value,
+        numberOfRows: document.getElementById("numberOfRows").value,
+        seatsPerRow: document.getElementById("seatsPerRow").value,
+        cinemaId: 1
+    };
 
     try {
-        await createTheatre({theatreNumber, numberOfRows, seatsPerRow, cinemaId: 1});
-        const message = document.getElementById("message");
-        message.textContent = "Theatre created!";
-        message.style.color = "green";
-        await loadTheatres();
+        await createTheatre(theatreData);
+        document.getElementById("message").textContent = "Theatre created!";
+        await loadTheatres(container);
     } catch (err) {
-        const message = document.getElementById("message");
-        message.textContent = "Error: " + err.message;
-        message.style.color = "red";
+        document.getElementById("message").textContent = "Error: " + err.message;
     }
 }
 
-async function handleDelete(theatreId) {
-    const confirmed = confirm("Are you sure you want to delete this theatre?");
-
-    if (!confirmed) {
-        return; // user cancelled
-    }
-
-    try {
-        await (deleteTheatre(theatreId));
-        window.location.href = "theatres.html";
-    } catch (err) {
-        const message = document.getElementById("message");
-        message.textContent = "Error: " + err.message;
-        message.style.color = "red";
+async function handleDelete(theatreId, container) {
+    if (confirm("Delete theatre?")) {
+        try {
+            await deleteTheatre(theatreId);
+            await loadTheatres(container);
+        } catch (err) {
+            document.getElementById("message").textContent = "Error: " + err.message;
+        }
     }
 }
+
+export default { render };

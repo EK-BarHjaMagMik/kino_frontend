@@ -2,21 +2,20 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Kino - Now Showing</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kino SPA</title>
     <link rel="stylesheet" href="css/style.css">
+    <script defer type="module" src="js/router.js"></script>
 </head>
-<body>
+<body class="site-wrapper">
 
-<div class="top-bar">
-    <a href="admin/index.html">Admin</a>
-</div>
+<div id="header-root"></div>
 
-<h1>Kino</h1>
-<h2>Now Showing</h2>
+<main id="content" class="site-content">
+    <!-- Page content injected here -->
+</main>
 
-<div id="moviesContainer"></div>
-
-<script type="module" src="js/pages/index.js"></script>
+<div id="footer-root"></div>
 
 </body>
 </html>
